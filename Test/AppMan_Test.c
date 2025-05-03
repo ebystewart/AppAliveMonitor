@@ -10,47 +10,43 @@
 #include <mqueue.h>
 #include <sys/stat.h>
 
-bool checkpoint_reached_flag = true;
+bool notify_monitor = false;
 
 static void thread_handler(void *arg)
 {
-    mqd_t mqd;
+    int fd1;
+    int fd2;
     unsigned char buffer[5] = {0x00, 0x01, 0x00, 0x01, '\0'}; // This also facilitates sending pid of the process
     unsigned int prio = 0U;
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
-    mqd = mq_open("/mqueue", O_RDWR);
-    if (mqd == -1)
+    fd1 = mq_open("/tmp/npipe", O_WRONLY);
+    if (fd1 == -1)
     {
         printf("Error: Queue may not exist, create new\n");
-        mqd = mq_open("/mqueue", O_RDWR | O_CREAT | O_EXCL, S_IRWXU | S_IRWXG, NULL);
+        mkfifo("/tmp/npipe", 0666);
+        fd1 = open("/npipe", O_WRONLY);   
     }
 
-    if(mqd == -1){
-        perror("mq_open failed");
+    if(fd1 == -1){
+        perror("fifo_open failed");
         exit(-1);
     }
-    #if 0
-    if(mq_send(mqd, "Hello!!", strlen("Hello!!")+1, prio) != -1)
-    {
-        printf("Status: mq_send successful\n");
-    }
-    #endif
     #if 1
     // another way is to use mq_notify()
     while(1)
     {
-        if(checkpoint_reached_flag == true){
-            if (mq_send(mqd, buffer, 5U, prio) != -1)
+        if(notify_monitor == true){
+            if (write(fd1, buffer, 5U) != -1)
             {
-                printf("checkpoint 1 reached and notified to monitor successfully\n");
-                checkpoint_reached_flag = false;
+                printf("Monitor notified of new Appn");
+                close(fd1);
+                notify_monitor = false;
             }
         }
     }
     #endif
-    mq_close(mqd);
 }
 
 int main(int argc, char **argv)

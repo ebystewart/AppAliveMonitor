@@ -10,23 +10,28 @@
 #include <mqueue.h>
 #include <sys/stat.h>
 
-bool notify_monitor = false;
+bool notify_monitor = true;
 
 static void thread_handler(void *arg)
 {
     int fd1;
     int fd2;
-    unsigned char buffer[5] = {0x00, 0x01, 0x00, 0x01, '\0'}; // This also facilitates sending pid of the process
+    unsigned char txBuffer[5] = {0x00, 0x01, 0x00, 0x01, '\0'}; // This also facilitates sending pid of the process
+    unsigned char rxBuffer[10];
     unsigned int prio = 0U;
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
-    fd1 = mq_open("/tmp/npipe", O_WRONLY);
+    fd1 = open("/home/eby/npipe", O_WRONLY);
     if (fd1 == -1)
     {
         printf("Error: Queue may not exist, create new\n");
-        mkfifo("/tmp/npipe", 0666);
-        fd1 = open("/npipe", O_WRONLY);   
+        /* We use a named fifo because, we create the fifo much later than spanwing teh child process */
+        if(mkfifo("/home/eby/npipe", S_IWUSR | S_IRUSR | S_IRGRP | S_IROTH) == -1){
+            perror("fifo creation failed");
+            exit(-1);
+        }
+        fd1 = open("/home/eby/npipe", O_WRONLY);   
     }
 
     if(fd1 == -1){
@@ -38,12 +43,19 @@ static void thread_handler(void *arg)
     while(1)
     {
         if(notify_monitor == true){
-            if (write(fd1, buffer, 5U) != -1)
+            if (write(fd1, txBuffer, 5U) != -1)
             {
+
                 printf("Monitor notified of new Appn");
                 close(fd1);
                 notify_monitor = false;
             }
+        }
+        fd2 = open("/home/eby/npipe", O_RDONLY);  
+        if(read(fd2, rxBuffer, sizeof(rxBuffer)) != -1)
+        {
+            printf("Process termination request received for PID : %d\n", rxBuffer[0]);
+            close(fd2);
         }
     }
     #endif

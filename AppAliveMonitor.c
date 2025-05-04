@@ -12,6 +12,9 @@
 #include <string.h>
 #include <sys/stat.h>
 
+char * pid_ptr;
+bool termination_request = true;
+
 /* Note:
   IPC between AliveMoitor and other apps is message queue based
   IPC between AliveMonitor and App Manager is named FIFO based 
@@ -64,11 +67,12 @@ static void thread_handler2(void *arg)
     int fd1;
     int fd2;
     /* for some reason, 10K buffer is required to get the recption working in ubuntu */
-    unsigned char buffer[100];
+    unsigned char rxBuffer[10];
+    unsigned char txBuffer[10];
     pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
     pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED, NULL);
 
-    fd2 = open("/npipe", O_RDONLY); //O_CREAT  required for first time
+    fd2 = open("/home/eby/npipe", O_RDONLY); //O_CREAT  required for first time
     
     if(fd2 == -1){
         perror("fifo_open failed");
@@ -76,18 +80,29 @@ static void thread_handler2(void *arg)
     }
     #if 1
     // another way is to use mq_notify()
-    while(1)
+    //while(1)
     {
-        if(read(fd2, buffer, sizeof(buffer)) != -1)
+        if(read(fd2, rxBuffer, sizeof(rxBuffer)) != -1)
         {
-            printf("New Process spawned with pid : %d\n", buffer[0]);
+            printf("New Process spawned with pid : %d\n", rxBuffer[0]);
+            pid_ptr[0] = rxBuffer[0];
             close(fd2);
         }
         else{
             perror("receive failed");
             sleep(10);
         }
-
+        if(termination_request == true){
+            fd1 = open("/home/eby/npipe", O_WRONLY);
+            txBuffer[0] = 0x55U;
+            txBuffer[1] = '\0';
+            if (write(fd1, txBuffer, 2U) != -1)
+            {
+                printf("Request App Manager to terminate a child\n");
+                close(fd1);
+                termination_request = false;
+            }
+        }
     }
     #endif
 }
@@ -111,7 +126,7 @@ int main(int argc, char **argv)
     /* Get the process Id of each process from App Manager */
 
     /* store the PIDs in an array */
-    uint8_t *pid_ptr = calloc(1, numApps);
+    pid_ptr = calloc(1, numApps);
     for(idx = 0U; idx < numApps; idx++)
     {
         pid = pid_ptr[idx];

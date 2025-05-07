@@ -12,7 +12,9 @@
 #include <string.h>
 #include <sys/stat.h>
 
-char * pid_ptr;
+#define NUM_APPS 4U // This also has to come from the App Manager
+
+uint16_t *pid_ptr;
 bool termination_request = true;
 
 /* Note:
@@ -66,6 +68,7 @@ static void thread_handler2(void *arg)
 {
     int fd1;
     int fd2;
+    unsigned short int idx;
     /* for some reason, 10K buffer is required to get the recption working in ubuntu */
     unsigned char rxBuffer[10];
     unsigned char txBuffer[10];
@@ -85,7 +88,8 @@ static void thread_handler2(void *arg)
         if(read(fd2, rxBuffer, sizeof(rxBuffer)) != -1)
         {
             printf("New Process spawned with pid : %d\n", rxBuffer[0]);
-            pid_ptr[0] = rxBuffer[0];
+            idx = (rxBuffer[0] << 8) | rxBuffer[1];
+            pid_ptr[idx] = (rxBuffer[2] << 8) | rxBuffer[3];
             close(fd2);
         }
         else{
@@ -126,19 +130,19 @@ int main(int argc, char **argv)
     /* Get the process Id of each process from App Manager */
 
     /* store the PIDs in an array */
-    pid_ptr = calloc(1, numApps);
-    for(idx = 0U; idx < numApps; idx++)
+    pid_ptr = calloc(1, (sizeof(uint16_t) * NUM_APPS));
+    for(idx = 0U; idx < NUM_APPS; idx++)
     {
         pid = pid_ptr[idx];
     }
 
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-    pthread_create(pthread, &attr, thread_handler, (void *)pid_ptr);
+    pthread_create(pthread, &attr, thread_handler, (void *)pid_ptr); //pid_ptr is initialized only in thread 2
 
     pthread_attr_init(&attr2);
     pthread_attr_setdetachstate(&attr2, PTHREAD_CREATE_JOINABLE);
-    pthread_create(pthread2, &attr2, thread_handler2, (void *)pid_ptr);
+    pthread_create(pthread2, &attr2, thread_handler2, (void *)pid_ptr); //pid_ptr is initialized only inside thread 2
     while(1)
     {
 
